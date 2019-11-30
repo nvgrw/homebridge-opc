@@ -106,14 +106,14 @@ OpcAccessory.prototype = {
   setPresetActive: function (service, preset_index, value, callback) {
     const on = value === 1 || value === true || value === 'true';
     // turn on but already on
-    if (on && preset_index == service.active_preset) {
+    if (on && preset_index == service.data.active_preset) {
       callback();
       return;
     }
 
     // turn off, already on
-    if (!on && preset_index == service.active_preset) {
-      service.active_preset = -1;
+    if (!on && preset_index == service.data.active_preset) {
+      service.data.active_preset = -1;
       this.sendColor(this.fadeDuration);
       callback();
       return;
@@ -125,7 +125,7 @@ OpcAccessory.prototype = {
       return;
     }
 
-    service.active_preset = preset_index;
+    service.data.active_preset = preset_index;
     this.sendColor(this.fadeDuration);
     callback();
   },
