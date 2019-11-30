@@ -36,6 +36,7 @@ function OpcAccessory(log, config) {
     s.data = l;
     this.setupLightbulbService(s);
     this.lightbulbServices.push(s);
+    this.lightbulbServices.push(...s.linkedServices);
     this.log('Configured Lightbulb: %s: %j', l.name, l.pixels);
   });
 
