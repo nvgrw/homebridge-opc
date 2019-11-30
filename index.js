@@ -279,7 +279,7 @@ OpcAccessory.prototype.setupLightbulbService = function (service) {
   presets.forEach((p, i) => {
     const preset_switch = new Service.Switch(p.name, service.UUID + "-" + i);
     preset_switch
-      .addCharacteristic(Characteristic.On)
+      .getCharacteristic(Characteristic.On)
       .on('get', function (callback) { self.getPresetActive(service, i, callback); })
       .on('set', function (value, callback, context) { self.setPresetActive(service, i, value, callback); });
     service.addLinkedService(preset_switch);
