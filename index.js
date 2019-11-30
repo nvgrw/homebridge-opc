@@ -15,7 +15,7 @@ module.exports = function (homebridge) {
   homebridge.registerAccessory('homebridge-opc', 'OpcAccessory', OpcAccessory);
 };
 
-function OpcAccessory (log, config) {
+function OpcAccessory(log, config) {
 
   this.log = log;
 
@@ -30,7 +30,7 @@ function OpcAccessory (log, config) {
 
   this.channels = [];
   this.lightbulbServices = [];
-  this.lightbulbs.forEach( (l, i) => {
+  this.lightbulbs.forEach((l, i) => {
     var s = new Service.Lightbulb(l.name, i);
     l.pixels = parsePixels(l.map, this.channels);
     s.data = l;
@@ -39,9 +39,9 @@ function OpcAccessory (log, config) {
     this.log('Configured Lightbulb: %s: %j', l.name, l.pixels);
   });
 
-  this.gradients.forEach( (g) => {
+  this.gradients.forEach((g) => {
     g.lightbulbs = [];
-    g.lightbulbNames.forEach( (lbn) => {
+    g.lightbulbNames.forEach((lbn) => {
       g.lightbulbs.push(_.find(this.lightbulbs, ['name', lbn]));
     });
     g.name = _.map(g.lightbulbs, 'name').join(' - ');
@@ -50,7 +50,7 @@ function OpcAccessory (log, config) {
     this.log('Configured Gradient: %s: %j', g.name, g.pixels);
   });
 
-  this.channels.forEach( (c) => {
+  this.channels.forEach((c) => {
     c.pixelData = new Uint32Array(c.pixelCount);
   });
 
@@ -64,11 +64,11 @@ OpcAccessory.prototype = {
   getValue: function (service, characteristic, callback) {
     var value;
     switch (characteristic.toLowerCase()) {
-      case 'on':         value = service.data.on; break; // eslint-disable-line no-multi-spaces
+      case 'on': value = service.data.on; break; // eslint-disable-line no-multi-spaces
       case 'brightness': value = service.data.brightness; break; // eslint-disable-line no-multi-spaces
-      case 'hue':        value = service.data.hue; break; // eslint-disable-line no-multi-spaces
+      case 'hue': value = service.data.hue; break; // eslint-disable-line no-multi-spaces
       case 'saturation': value = service.data.saturation; break; // eslint-disable-line no-multi-spaces
-      default:           this.log('Invalid characteristic: %s', characteristic);
+      default: this.log('Invalid characteristic: %s', characteristic);
     }
     callback(null, value);
   },
@@ -98,6 +98,37 @@ OpcAccessory.prototype = {
     callback();
   },
 
+  getPresetActive: function (service, preset_index, callback) {
+    callback(service.data.active_preset == preset_index, null);
+  },
+
+  setPresetActive: function (service, preset_index, value, callback) {
+    const on = value === 1 || value === true || value === 'true';
+    // turn on but already on
+    if (on && preset_index == service.active_preset) {
+      callback();
+      return;
+    }
+
+    // turn off, already on
+    if (!on && preset_index == service.active_preset) {
+      service.active_preset = -1;
+      this.sendColor(this.fadeDuration);
+      callback();
+      return;
+    }
+
+    // Turning off but not the active preset
+    if (!on) {
+      callback();
+      return;
+    }
+
+    service.active_preset = preset_index;
+    this.sendColor(this.fadeDuration);
+    callback();
+  },
+
   identify: function (callback) {
     // TODO
     callback();
@@ -105,35 +136,45 @@ OpcAccessory.prototype = {
 
   sendOpcData: function (fadeDuration) {
 
-    this.channels.forEach( (c) => {
+    this.channels.forEach((c) => {
       c.oldPixelData = new Uint32Array(c.pixelData);
       c.pixelData = new Uint32Array(c.pixelCount);
     });
 
     // Set color for each pixel segment
-    this.lightbulbs.forEach( (d) => {
-      var c = getColorFromLightbulb(d);
-      d.rgb = c.toRgb();
-      d.rgbInt = rgbToInt(d.rgb);
-      d.pixels.forEach( (p) => {
-        this.channels[p[0]].pixelData[p[1]] = d.rgbInt;
-      });
+    this.lightbulbs.forEach((d) => {
+      if (d.active_preset == -1) {
+        var c = getColorFromLightbulb(d);
+        d.rgb = c.toRgb();
+        d.rgbInt = rgbToInt(d.rgb);
+        d.pixels.forEach((p) => {
+          this.channels[p[0]].pixelData[p[1]] = d.rgbInt;
+        });
+      } else {
+        var cs = getColorsFromLightbulbPreset(d);
+        var csInt = cs.map(c => rgbToInt(c.toRgb()));
+        d.pixels.forEach((p, i) => {
+          if (i < csInt.length) {
+            this.channels[p[0]].pixelData[p[1]] = csInt[i];
+          }
+        });
+      }
     });
 
     // Set color for each gradient segment
-    this.gradients.forEach( (g) => {
+    this.gradients.forEach((g) => {
       var tg = tinygradient(_.map(g.lightbulbs, 'rgb'));
       var gColors = tg.rgb(g.pixels.length + 2); // Includes start and end (+2)
       gColors = gColors.slice(1, -1); // Remove start and end
-      g.pixels.forEach( (p, i) => {
+      g.pixels.forEach((p, i) => {
         var gradRgb = rgbToInt(gColors[i].toRgb());
-        p.forEach( (p) => {
+        p.forEach((p) => {
           this.channels[p[0]].pixelData[p[1]] = gradRgb;
         });
       });
     });
 
-    this.channels.forEach( (c, i) => {
+    this.channels.forEach((c, i) => {
       this.log('Channel: %d Colors: %j', i, c.pixelData);
     });
 
@@ -144,7 +185,7 @@ OpcAccessory.prototype = {
       var progress = 0;
       var startTime = new Date();
 
-      var timer = setInterval( () => {
+      var timer = setInterval(() => {
 
         progress = (new Date() - startTime) / fadeDuration;
         if (progress >= 1) {
@@ -152,10 +193,10 @@ OpcAccessory.prototype = {
           clearInterval(timer);
         }
 
-        this.channels.forEach( (c, i) => {
+        this.channels.forEach((c, i) => {
           if (c) {
             var pixelData = mixColors(c.oldPixelData, c.pixelData, progress);
-            this.log('%s %d %d channel: %d pixelData: %j', ( progress < 1 ? 'Fade' : 'Fade Complete'), fadeDuration, progress, i, pixelData);
+            this.log('%s %d %d channel: %d pixelData: %j', (progress < 1 ? 'Fade' : 'Fade Complete'), fadeDuration, progress, i, pixelData);
             this.opcClient.setPixelColors(i, pixelData);
           }
         });
@@ -164,7 +205,7 @@ OpcAccessory.prototype = {
 
     } else {
 
-      this.channels.forEach( (c, i) => {
+      this.channels.forEach((c, i) => {
         if (c) {
           this.opcClient.setPixelColors(i, c.pixelData);
           this.log('channel: %s pixelData: %j', i, c.pixelData);
@@ -214,60 +255,82 @@ OpcAccessory.prototype.setupLightbulbService = function (service) {
   var self = this;
 
   service
-  .getCharacteristic(Characteristic.On)
-  .on('get', function (callback) { self.getValue(service, 'on', callback); })
-  .on('set', function (value, callback, context) { self.setValue(service, 'on', value, callback, context); });
+    .getCharacteristic(Characteristic.On)
+    .on('get', function (callback) { self.getValue(service, 'on', callback); })
+    .on('set', function (value, callback, context) { self.setValue(service, 'on', value, callback, context); });
 
   service
-  .addCharacteristic(Characteristic.Brightness)
-  .on('get', function (callback) { self.getValue(service, 'brightness', callback); })
-  .on('set', function (value, callback, context) { self.setValue(service, 'brightness', value, callback, context); });
+    .addCharacteristic(Characteristic.Brightness)
+    .on('get', function (callback) { self.getValue(service, 'brightness', callback); })
+    .on('set', function (value, callback, context) { self.setValue(service, 'brightness', value, callback, context); });
 
   service
-  .addCharacteristic(Characteristic.Hue)
-  .on('get', function (callback) { self.getValue(service, 'hue', callback); })
-  .on('set', function (value, callback, context) { self.setValue(service, 'hue', value, callback, context); });
+    .addCharacteristic(Characteristic.Hue)
+    .on('get', function (callback) { self.getValue(service, 'hue', callback); })
+    .on('set', function (value, callback, context) { self.setValue(service, 'hue', value, callback, context); });
 
   service
-  .addCharacteristic(Characteristic.Saturation)
-  .on('get', function (callback) { self.getValue(service, 'saturation', callback); })
-  .on('set', function (value, callback, context) { self.setValue(service, 'saturation', value, callback, context); });
+    .addCharacteristic(Characteristic.Saturation)
+    .on('get', function (callback) { self.getValue(service, 'saturation', callback); })
+    .on('set', function (value, callback, context) { self.setValue(service, 'saturation', value, callback, context); });
 
+  service.data.active_preset = -1; // no active preset
+  const presets = service.data.presets || []
+  presets.forEach((p, i) => {
+    const preset_switch = new Service.Switch(p.name, "");
+    preset_switch
+      .addCharacteristic(Characteristic.On)
+      .on('get', function (callback) { self.getPresetActive(service, i, callback); })
+      .on('set', function (value, callback, context) { self.setPresetActive(service, i, value, callback); });
+    service.addLinkedService(preset_switch);
+  });
 };
 
-function getColorFromLightbulb (d) {
+function getColorFromLightbulb(d) {
   if (d.on) {
-    return tinycolor({h: d.hue || 0, s: d.saturation || 0, v: d.brightness || 0});
+    return tinycolor({ h: d.hue || 0, s: d.saturation || 0, v: d.brightness || 0 });
   }
-  return tinycolor({r: 0, g: 0, b: 0});
+  return tinycolor({ r: 0, g: 0, b: 0 });
 }
 
-function rgbToInt (rgb) {
+function getColorsFromLightbulbPreset(d) {
+  return d.presets[d.active_preset].data.map(px => {
+    if (d.on) {
+      let c = tinycolor({ r: px[0], g: px[1], b: px[2] }).toHsv();
+      c.v = d.brightness || 0;
+      return tinycolor(c);
+    } else {
+      return tinycolor({ r: 0, g: 0, b: 0 });
+    }
+  });
+}
+
+function rgbToInt(rgb) {
   return ((rgb.r & 0xff) << 16) + ((rgb.g & 0xff) << 8) + (rgb.b & 0xff);
 }
 
-function intToRgb (n) {
+function intToRgb(n) {
   return { r: ((n >> 16) & 0xff), g: ((n >> 8) & 0xff), b: (n & 0xff) };
 }
 
-function mixColors (a0, a1, t) {
+function mixColors(a0, a1, t) {
   var mix = new Uint32Array(a0.length);
   for (var i = 0; i < a0.length; i++) {
-    mix[i] = rgbToInt(tinycolor.mix(intToRgb(a0[i]), intToRgb(a1[i]), t*100).toRgb());
+    mix[i] = rgbToInt(tinycolor.mix(intToRgb(a0[i]), intToRgb(a1[i]), t * 100).toRgb());
   }
   return mix;
 }
 
-function parsePixels (pixels, channels) {
+function parsePixels(pixels, channels) {
 
   var channelFn = function (channel, first, len) {
     if (!channels[channel] || !channels[channel].pixelCount) { channels[channel] = { pixelCount: 0 }; }
-    channels[channel].pixelCount = Math.max(channels[channel].pixelCount, Math.max(first, first+len)+1);
+    channels[channel].pixelCount = Math.max(channels[channel].pixelCount, Math.max(first, first + len) + 1);
   };
 
   var recurseFn = function (pixels) {
     var parsedPixels = [];
-    pixels.forEach( (p) => {
+    pixels.forEach((p) => {
       if (Array.isArray(p)) {
         if (Array.isArray(p[0])) {
           parsedPixels.push(recurseFn(p));
@@ -295,13 +358,13 @@ function parsePixels (pixels, channels) {
               for (i = 0; i < Math.abs(len); i += stepLen) {
                 pixelIndex = first + i * Math.sign(len);
                 if (stepLen === 1) {
-                  parsedPixels.push([ [channel, pixelIndex] ]);
+                  parsedPixels.push([[channel, pixelIndex]]);
                 } else {
                   if (pixelIndex + stepLen > first + len) {
                     // clamp to end of gradient length
                     stepLen = (first + len) - pixelIndex;
                   }
-                  parsedPixels.push(recurseFn( [[channel, pixelIndex, stepLen]] ));
+                  parsedPixels.push(recurseFn([[channel, pixelIndex, stepLen]]));
                 }
               }
             }
