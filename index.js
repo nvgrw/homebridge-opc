@@ -298,7 +298,7 @@ function getColorsFromLightbulbPreset(d) {
   return d.presets[d.active_preset].data.map(px => {
     if (d.on) {
       let c = tinycolor({ r: px[0], g: px[1], b: px[2] }).toHsv();
-      c.v = d.brightness || 0;
+      c.v *= (d.brightness || 1);
       return tinycolor(c);
     } else {
       return tinycolor({ r: 0, g: 0, b: 0 });
