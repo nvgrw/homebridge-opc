@@ -100,7 +100,7 @@ OpcAccessory.prototype = {
   },
 
   getPresetActive: function (service, preset_index, callback) {
-    callback(service.data.active_preset == preset_index, null);
+    callback(null, service.data.active_preset == preset_index);
   },
 
   setPresetActive: function (service, preset_index, value, callback) {
