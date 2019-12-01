@@ -106,22 +106,17 @@ OpcAccessory.prototype = {
   setPresetActive: function (service, preset_index, value, callback) {
     const on = value === 1 || value === true || value === 'true';
 
-    // Turning off but not the active preset || turn on but already on
-    if (on && preset_index == service.data.active_preset || !on) {
-      callback();
-      return;
-    }
-
-    if (!on && preset_index == service.data.active_preset) {
-      // turn off, already on
-      service.data.active_preset = -1;
-    } else {
+    if (on && preset_index != service.data.active_preset) {
+      // Reset the other switches
       service.data.preset_switches.forEach((sw, i) => {
         if (i != preset_index) {
           sw.getCharacteristic(Characteristic.On).updateValue(false);
         }
       });
+
       service.data.active_preset = preset_index;
+    } else {
+      service.data.active_preset = -1;
     }
 
     this.sendColor(this.fadeDuration);
