@@ -36,7 +36,7 @@ function OpcAccessory(log, config) {
     s.data = l;
     this.setupLightbulbService(s);
     this.lightbulbServices.push(s);
-    this.lightbulbServices.push(...s.linkedServices);
+    this.lightbulbServices.push(...s.data.preset_switches);
     this.log('Configured Lightbulb: %s: %j', l.name, l.pixels);
   });
 
@@ -105,27 +105,25 @@ OpcAccessory.prototype = {
 
   setPresetActive: function (service, preset_index, value, callback) {
     const on = value === 1 || value === true || value === 'true';
-    // turn on but already on
-    if (on && preset_index == service.data.active_preset) {
+
+    // Turning off but not the active preset || turn on but already on
+    if (on && preset_index == service.data.active_preset || !on) {
       callback();
       return;
     }
 
-    // turn off, already on
     if (!on && preset_index == service.data.active_preset) {
+      // turn off, already on
       service.data.active_preset = -1;
-      this.sendColor(this.fadeDuration);
-      callback();
-      return;
+    } else {
+      service.data.preset_switches.forEach((sw, i) => {
+        if (i != preset_index) {
+          sw.getCharacteristic(Characteristic.On).updateValue(false);
+        }
+      });
+      service.data.active_preset = preset_index;
     }
 
-    // Turning off but not the active preset
-    if (!on) {
-      callback();
-      return;
-    }
-
-    service.data.active_preset = preset_index;
     this.sendColor(this.fadeDuration);
     callback();
   },
@@ -277,14 +275,16 @@ OpcAccessory.prototype.setupLightbulbService = function (service) {
 
   service.data.active_preset = -1; // no active preset
   const presets = service.data.presets || []
+  let preset_switches = []
   presets.forEach((p, i) => {
     const preset_switch = new Service.Switch(p.name, service.UUID + "-" + i);
     preset_switch
       .getCharacteristic(Characteristic.On)
       .on('get', function (callback) { self.getPresetActive(service, i, callback); })
       .on('set', function (value, callback, context) { self.setPresetActive(service, i, value, callback); });
-    service.addLinkedService(preset_switch);
+    preset_switches.push(preset_switch);
   });
+  service.data.preset_switches = preset_switches
 };
 
 function getColorFromLightbulb(d) {
